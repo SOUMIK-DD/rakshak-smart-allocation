@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db_session import init_db, get_session
@@ -72,6 +72,21 @@ app.include_router(buildings.router)
 app.include_router(drills.router)
 
 
+# ---------------------------------------------------------------------------
+# Health / ping endpoints (no DB, fast response for keep-alive)
+# ---------------------------------------------------------------------------
+@app.get("/api/ping")
+async def ping():
+    return {"status": "ok", "message": "Rakshak is alive!"}
+
+
+@app.get("/api/seed", tags=["seed"])
+async def check_seed(session: AsyncSession = Depends(get_session)):
+    """Check if data is seeded."""
+    hospitals_list = await db.list_hospitals(session)
+    return {"seeded": len(hospitals_list) > 0, "hospitals": len(hospitals_list)}
+
+
 @app.post("/api/seed", tags=["seed"])
 async def seed_data(session: AsyncSession = Depends(get_session)):
     """Seed demo data if database is empty."""
@@ -114,6 +129,7 @@ async def get_results(session: AsyncSession = Depends(get_session)):
 
 # ---------------------------------------------------------------------------
 # Serve frontend static files (built React app)
+# Must be LAST — catch-all must not override API routes
 # ---------------------------------------------------------------------------
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -123,7 +139,10 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
-        """Catch-all: serve index.html for SPA routing, or static files."""
+        """Catch-all: serve index.html for SPA routing, or static files.
+        
+        IMPORTANT: API routes registered above take priority over this catch-all.
+        """
         file_path = STATIC_DIR / full_path
         if file_path.is_file():
             return FileResponse(file_path)

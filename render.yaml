@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: rakshak
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/ping
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./data/disaster_management.db
