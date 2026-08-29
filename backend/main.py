@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db_session import init_db, get_session
@@ -42,7 +46,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Disaster Management System",
+    title="Rakshak — Disaster Management System",
     description="Comprehensive disaster management with smart hospital allocation, "
     "indoor emergency modeling, evacuation drills, and undo/redo.",
     version="2.0.0",
@@ -52,7 +56,7 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -106,3 +110,21 @@ async def get_stats(session: AsyncSession = Depends(get_session)):
 async def get_results(session: AsyncSession = Depends(get_session)):
     """List all allocation results."""
     return await db.list_allocation_results(session)
+
+
+# ---------------------------------------------------------------------------
+# Serve frontend static files (built React app)
+# ---------------------------------------------------------------------------
+STATIC_DIR = Path(__file__).parent / "static"
+
+if STATIC_DIR.is_dir():
+    # Serve JS/CSS assets with cache headers
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(request: Request, full_path: str):
+        """Catch-all: serve index.html for SPA routing, or static files."""
+        file_path = STATIC_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(STATIC_DIR / "index.html")

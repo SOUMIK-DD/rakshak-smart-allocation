@@ -1,25 +1,28 @@
-FROM python:3.11-slim
+# ---- Stage 1: Build frontend ----
+FROM node:20-alpine AS frontend-build
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ .
+RUN npm run build
 
+# ---- Stage 2: Python backend + static frontend ----
+FROM python:3.11-slim
 WORKDIR /app
 
-# Install system dependencies (including curl for healthcheck)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    curl \
+RUN apt-get update && apt-get install -y --no-install-recommends gcc curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
 COPY backend/ .
 
-# Create data directory for SQLite
+# Copy built frontend into backend/static so FastAPI serves it
+COPY --from=frontend-build /app/dist ./static
+
 RUN mkdir -p /app/data
 
-# Expose port
 EXPOSE 8000
 
-# Run the application (Railway provides $PORT, fallback to 8000)
 CMD sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
